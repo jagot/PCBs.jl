@@ -109,7 +109,9 @@ net_classes() = Dict{Tuple{Symbol,String},Dict{Symbol,Float64}}(
 end
 
 struct PCB
+    circuit::Circuit
     filename::String
+    directories::Vector{String}
     version::String
     host::String
     general::Dict{Symbol,Number}
@@ -119,7 +121,8 @@ struct PCB
     net_classes::Dict{Tuple{Symbol,String},Dict{Symbol,Float64}}
 end
 
-PCB(filename;
+PCB(circuit::Circuit, filename::String;
+    directories=[],
     version="20171130",
     host="(5.0.1-3-g963ef8bb5)",
     general=Settings.general(),
@@ -127,8 +130,9 @@ PCB(filename;
     layers=Settings.layers(),
     setup=Settings.setup(),
     net_classes=Settings.net_classes()) =
-        PCB(filename, version, host, general, page, layers, setup,
-            net_classes)
+        PCB(circuit, filename, directories,
+            version, host,
+            general, page, layers, setup, net_classes)
 
 function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false)
     node = Lisp.KNode([Lisp.KSym(name)])
@@ -150,6 +154,30 @@ function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false)
     node
 end
 
+function read_kicad_lisp_file(filename)
+    isfile(filename) || throw(ArgumentError("$filename missing"))
+    @debug "Reading $filename"
+    open(Lisp.Read, filename)[1]
+end
+
+function find_footprint(footprint, directories)
+    directories = copy(directories)
+    push!(directories, ENV["KISYSMOD"])
+
+    footprint_path = split(footprint, ":")
+    footprint_path[1] = "$(footprint_path[1]).pretty"
+    footprint_path[2] = "$(footprint_path[2]).kicad_mod"
+    footprint_path = joinpath(footprint_path...)
+
+    @debug "Finding footprint $footprint"
+    for dir in directories
+        candidate = joinpath(dir, footprint_path)
+        @debug "Trying $candidate"
+        isfile(candidate) && return read_kicad_lisp_file(candidate)
+    end
+    throw(ArgumentError("Footprint $footprint not found"))
+end
+
 function Base.show(io::IO, pcb::PCB)
     node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
 
@@ -166,28 +194,44 @@ function Base.show(io::IO, pcb::PCB)
         push!(node.children, nc)
     end
 
+    footprints = Dict{String, Lisp.KNode}()
+
+    for e in pcb.circuit.elements
+        f = try
+            e.meta[:footprint]
+        catch
+            throw(ArgumentError("Footprint missing from $e"))
+        end
+        footprint = copy(get(footprints, f, find_footprint(f, pcb.directories)))
+        ks = keys(e.meta)
+        if :x ∈ ks && :y ∈ ks
+            at = Lisp.KNode([Lisp.KSym("at")])
+            for c in [:x,:y]
+                push!(at.children, Lisp.obj(e.meta[c]))
+            end
+            push!(footprint.children, at)
+        end
+
+        push!(node.children, footprint)
+    end
+
     show(io, node)
 end
 
-function save(pcb::PCB, c::Circuit)
+function save(pcb::PCB,overwrite::Bool=false)
     filename = "$(pcb.filename).kicad_pcb"
-    @info "Saving $c to $filename"
+    if isfile(filename)
+        if overwrite
+            @warn "Overwriting existing $(filename)"
+        else
+            error("$(filename) already exists")
+        end
+    else
+        @info "Saving $(pcb.circuit) to $filename"
+    end
     open(filename, "w") do file
         show(file, pcb)
     end
-end
-
-function read_kicad_lisp_file(filename)
-    isfile(filename) || throw(ArgumentError("$filename missing"))
-    @info "Reading $filename"
-    contents = open(Lisp.Read, filename)
-end
-
-function read_kicad_footprint(footprint, kicad_footprint_dir)
-    footprint = split(footprint, ":")
-    footprint[1] = "$(footprint[1]).pretty"
-    footprint[2] = "$(footprint[2]).kicad_mod"
-    read_kicad_lisp_file(joinpath(kicad_footprint_dir, footprint...))
 end
 
 export PCB

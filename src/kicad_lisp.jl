@@ -99,6 +99,8 @@ mutable struct KNode <: KObj
 end
 KNode() = KNode(KObj[])
 
+Base.copy(n::KNode) = KNode(copy(n.children))
+
 function Base.show(io::IO, node::KNode)
     write(io, "(")
     col = 1
