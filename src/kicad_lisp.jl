@@ -126,12 +126,14 @@ end
 struct KSym <: KObj
     name::String
 end
+KSym(name::Symbol) = KSym(string(name))
 Base.show(io::IO, s::KSym) = write(io, s.name)
 
 struct KStr <: KObj
     str::String
+    KStr(str::String) = new(strip(str, '"'))
 end
-Base.show(io::IO, s::KStr) = write(io, s.str)
+Base.show(io::IO, s::KStr) = write(io, "\"", s.str, "\"")
 
 abstract type KNum <: KObj end
 
@@ -152,6 +154,11 @@ struct KFloat{F<:AbstractFloat} <: KNum
     f::F
 end
 Base.show(io::IO, f::KFloat) = write(io, string(f.f))
+
+obj(o::Symbol) = KSym(o)
+obj(o::String) = KStr(o)
+obj(o::I) where {I<:Integer} = KInt(o)
+obj(o::F) where {F<:AbstractFloat} = KFloat(o)
 
 function Parse(tokens::Vector{Tuple{Symbol,String}})
     nodes = KNode[]
