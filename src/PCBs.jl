@@ -259,6 +259,10 @@ function Base.show(io::IO, pcb::PCB)
                           Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(pad[2]), Lisp.KStr(pad[1])]))
                 elseif c.children[1] == Lisp.KSym("model") && :model ∈ ks
                     c.children = get_model(e.meta[:model])
+                elseif c.children[1] == Lisp.KSym("fp_text") &&
+                    c.children[2] == Lisp.KSym("reference")
+                    c.children = copy(c.children)
+                    c.children[3] = Lisp.KStr(string(e))
                 end
             end
         end
