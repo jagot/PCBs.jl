@@ -178,6 +178,17 @@ function find_footprint(footprint, directories)
     throw(ArgumentError("Footprint $footprint not found"))
 end
 
+xyz(x, y, z) = Lisp.KNode([Lisp.KSym("xyz"), Lisp.obj(x), Lisp.obj(y), Lisp.obj(z)])
+
+function get_model(filename::String; at=[0,0,0], scale=[1,1,1], rotate=[0,0,0])
+    [Lisp.KSym("model"), Lisp.KSym(filename),
+     Lisp.KNode([Lisp.KSym("at"), xyz(at...)]),
+     Lisp.KNode([Lisp.KSym("scale"), xyz(scale...)]),
+     Lisp.KNode([Lisp.KSym("rotate"), xyz(rotate...)])]
+end
+
+get_model(model::Pair{String,<:Dict{Symbol}}) = get_model(model[1];model[2]...)
+
 function Base.show(io::IO, pcb::PCB)
     node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
 
@@ -240,12 +251,15 @@ function Base.show(io::IO, pcb::PCB)
             net,net_index
         end
         for (i,c) in enumerate(footprint.children)
-            if c isa Lisp.KNode && length(c.children) > 2 &&
-                c.children[1] == Lisp.KSym("pad") && c.children[2] isa Lisp.KInt
-                pad = pads[c.children[2].i]
-                c.children = copy(c.children)
-                push!(c.children,
-                      Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(pad[2]), Lisp.KStr(pad[1])]))
+            if c isa Lisp.KNode && length(c.children) > 2
+                if c.children[1] == Lisp.KSym("pad") && c.children[2] isa Lisp.KInt
+                    pad = pads[c.children[2].i]
+                    c.children = copy(c.children)
+                    push!(c.children,
+                          Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(pad[2]), Lisp.KStr(pad[1])]))
+                elseif c.children[1] == Lisp.KSym("model") && :model ∈ ks
+                    c.children = get_model(e.meta[:model])
+                end
             end
         end
 
