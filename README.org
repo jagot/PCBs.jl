@@ -1,0 +1,5 @@
+#+TITLE: PCBs.jl
+#+AUTHOR: Stefanos Carlström
+#+EMAIL: stefanos.carlstrom@gmail.com
+
+Small library to generate [[http://kicad-pcb.org][KiCad]] PCB files from [[https://github.com/jagot/Circuits.jl][Circuits]].
