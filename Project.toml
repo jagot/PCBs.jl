@@ -1,0 +1,8 @@
+name = "PCBs"
+uuid = "a943b7ec-0e02-11e9-2347-d77b7f90756a"
+authors = ["Stefanos Carlström <stefanos.carlstrom@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Automa = "67c07d97-cdcb-5c2c-af73-a7f9c32a568b"
+Circuits = "afbeee68-0d01-11e9-1fc1-f18836fa970c"
