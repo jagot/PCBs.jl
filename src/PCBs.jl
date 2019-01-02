@@ -181,16 +181,30 @@ end
 function Base.show(io::IO, pcb::PCB)
     node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
 
+    nets = node_names(pcb.circuit)
+    unique_nets = unique(nets)
+
+    pcb.general[:nets] += length(unique_nets)
+
     push!(node.children, settings_dict_to_lisp("general", pcb.general))
     append!(node.children, Lisp.Read("(page $(pcb.page))"))
     push!(node.children, settings_dict_to_lisp("layers", pcb.layers, true))
     push!(node.children, settings_dict_to_lisp("setup", pcb.setup))
 
     append!(node.children, Lisp.Read("(net 0 \"\")"))
+    for (i,net) in enumerate(unique_nets)
+        net_node = Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(i), Lisp.obj(net)])
+        push!(node.children, net_node)
+    end
 
     for ((name,descr),v) in pcb.net_classes
         nc = Lisp.KNode([Lisp.KSym("net_class"), Lisp.KSym(name), Lisp.KStr(descr)])
         append!(nc.children, settings_dict_to_lisp("net_class", v).children[2:end])
+        if name == :Default
+            for (i,net) in enumerate(unique_nets)
+                append!(nc.children, Lisp.Read("(add_net \"$(net)\")"))
+            end
+        end
         push!(node.children, nc)
     end
 
@@ -210,6 +224,21 @@ function Base.show(io::IO, pcb::PCB)
                 push!(at.children, Lisp.obj(e.meta[c]))
             end
             push!(footprint.children, at)
+        end
+        pads = map(enumerate(pins(pcb.circuit, e))) do (i,pi)
+            net = nets[pi]
+            net_index = findfirst(isequal(net), unique_nets)
+            @info "Connecting pin $i of $e (global pin $pi) to net $(net) (#$(net_index))"
+            net,net_index
+        end
+        for (i,c) in enumerate(footprint.children)
+            if c isa Lisp.KNode && length(c.children) > 2 &&
+                c.children[1] == Lisp.KSym("pad") && c.children[2] isa Lisp.KInt
+                pad = pads[c.children[2].i]
+                c.children = copy(c.children)
+                push!(c.children,
+                      Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(pad[2]), Lisp.KStr(pad[1])]))
+            end
         end
 
         push!(node.children, footprint)
