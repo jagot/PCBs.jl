@@ -218,17 +218,25 @@ function Base.show(io::IO, pcb::PCB)
         end
         footprint = copy(get(footprints, f, find_footprint(f, pcb.directories)))
         ks = keys(e.meta)
-        if :x ∈ ks && :y ∈ ks
-            at = Lisp.KNode([Lisp.KSym("at")])
-            for c in [:x,:y]
-                push!(at.children, Lisp.obj(e.meta[c]))
-            end
-            push!(footprint.children, at)
+
+        x = (:x ∈ ks ? e.meta[:x]
+             : :centerx ∈ ks && :offsetx ∈ ks ? e.meta[:centerx] + e.meta[:offsetx]
+             : 0)
+        y = (:y ∈ ks ? e.meta[:y]
+             : :centery ∈ ks && :offsety ∈ ks ? e.meta[:centery] + e.meta[:offsety]
+             : 0)
+        rot = :rot ∈ ks ? e.meta[:rot] : 0
+
+        at = Lisp.KNode([Lisp.KSym("at")])
+        for c in [x,y,rot]
+            push!(at.children, Lisp.obj(c))
         end
+        push!(footprint.children, at)
+
         pads = map(enumerate(pins(pcb.circuit, e))) do (i,pi)
             net = nets[pi]
             net_index = findfirst(isequal(net), unique_nets)
-            @info "Connecting pin $i of $e (global pin $pi) to net $(net) (#$(net_index))"
+            @debug "Connecting pin $i of $e (global pin $pi) to net $(net) (#$(net_index))"
             net,net_index
         end
         for (i,c) in enumerate(footprint.children)
