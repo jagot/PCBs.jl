@@ -127,6 +127,12 @@ function Zone(name, layer, polygon; settings = Settings.zone_settings())
     Zone(name, Symbol(layer), polygon, settings)
 end
 
+rectangular_zone(name, layer, x, y, w, h; kwargs...) =
+    Zone(name, layer, [x y
+                       x y+h
+                       x+w y+h
+                       x+w y]; kwargs...)
+
 struct PCB
     circuit::Circuit
     filename::String
