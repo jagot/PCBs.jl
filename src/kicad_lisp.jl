@@ -205,3 +205,12 @@ function Read(s::String)
 end
 
 Read(io::IO) = Read(read(io, String))
+
+function traverse(visit::Function, tree::KNode)
+    stack = KObj[tree]
+    while !isempty(stack)
+        node = pop!(stack)
+        node isa KNode && append!(stack, node.children)
+        visit(node)
+    end
+end
