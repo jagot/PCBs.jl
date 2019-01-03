@@ -2,6 +2,19 @@ module PCBs
 
 using Circuits
 
+function translate!(sc::SubCircuit; dx=0, dy=0)
+    for e in sc.c.elements
+        for (d,k) in [(dx,:x), (dx,:centerx), (dy,:y), (dy,:centery)]
+            if k ∈ keys(e.meta)
+                e.meta[k] += d
+            end
+        end
+    end
+    sc
+end
+
+translate(obj; kwargs...) = translate!(copy(obj); kwargs...)
+
 module Lisp
 include("kicad_lisp.jl")
 end
@@ -130,7 +143,7 @@ end
 rectangular_zone(name, layer, x, y, w, h; kwargs...) =
     Zone(name, layer, [x y; x y+h; x+w y+h; x+w y]; kwargs...)
 
-struct Segment
+mutable struct Segment
     layer::Symbol
     net::Union{Symbol,String}
     coordinates::Matrix{Float64}
@@ -139,6 +152,15 @@ end
 Segment(layer::Union{String,Symbol}, net::Union{String,Symbol},
         x, y, dx, dy, width) =
             Segment(Symbol(layer), net, [x y; x+dx y+dy], width)
+
+Base.copy(segment::Segment) =
+    Segment(segment.layer, segment.net, copy(segment.coordinates), segment.width)
+
+function translate!(segment::PCBs.Segment; dx=0, dy=0)
+    segment.coordinates[:,1] .+= dx
+    segment.coordinates[:,2] .+= dy
+    segment
+end
 
 struct PCB
     circuit::Circuit
@@ -437,6 +459,6 @@ function save(pcb::PCB,overwrite::Bool=false)
     end
 end
 
-export PCB
+export PCB, translate
 
 end # module
