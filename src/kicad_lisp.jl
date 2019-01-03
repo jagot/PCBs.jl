@@ -130,6 +130,9 @@ struct KSym <: KObj
 end
 KSym(name::Symbol) = KSym(string(name))
 Base.show(io::IO, s::KSym) = write(io, s.name)
+macro ksym_str(name)
+    KSym(name)
+end
 
 struct KStr <: KObj
     str::String
@@ -228,3 +231,5 @@ function traverse_nodes(visit::Function, tree::KNode, name::String)
         fc.name == name && visit(node)
     end
 end
+
+export @ksym_str
