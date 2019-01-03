@@ -214,3 +214,16 @@ function traverse(visit::Function, tree::KNode)
         visit(node)
     end
 end
+
+function traverse_nodes(visit::Function, tree::KNode)
+    traverse(tree) do obj
+        obj isa KNode && visit(obj)
+    end
+end
+
+function traverse_nodes(visit::Function, tree::KNode, name::String)
+    traverse_nodes(tree) do node
+        fc = first(node.children)
+        fc.name == name && visit(node)
+    end
+end
