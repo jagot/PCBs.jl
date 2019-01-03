@@ -128,10 +128,17 @@ function Zone(name, layer, polygon; settings = Settings.zone_settings())
 end
 
 rectangular_zone(name, layer, x, y, w, h; kwargs...) =
-    Zone(name, layer, [x y
-                       x y+h
-                       x+w y+h
-                       x+w y]; kwargs...)
+    Zone(name, layer, [x y; x y+h; x+w y+h; x+w y]; kwargs...)
+
+struct Segment
+    layer::Symbol
+    net::Union{Symbol,String}
+    coordinates::Matrix{Float64}
+    width::Float64
+end
+Segment(layer::Union{String,Symbol}, net::Union{String,Symbol},
+        x, y, dx, dy, width) =
+            Segment(Symbol(layer), net, [x y; x+dx y+dy], width)
 
 struct PCB
     circuit::Circuit
@@ -145,6 +152,7 @@ struct PCB
     setup::Dict{Symbol,Any}
     net_classes::Dict{Tuple{Symbol,String},Dict{Symbol,Float64}}
     zones::Vector{Zone}
+    segments::Vector{Segment}
 end
 
 PCB(circuit::Circuit, filename::String;
@@ -156,11 +164,11 @@ PCB(circuit::Circuit, filename::String;
     layers=Settings.layers(),
     setup=Settings.setup(),
     net_classes=Settings.net_classes(),
-    zones=Zone[]) =
+    zones=Zone[], segments=Segment[]) =
         PCB(circuit, filename, directories,
             version, host,
             general, page, layers, setup, net_classes,
-            zones)
+            zones, segments)
 
 function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false;
                                ks=collect(keys(settings)))
@@ -368,6 +376,22 @@ function elements_to_lisp(pcb::PCB, nets, unique_nets)
     element_nodes
 end
 
+function segments_to_lisp(pcb::PCB, nets, unique_nets)
+    segment_nodes = Lisp.KNode[]
+    for segment in pcb.segments
+        cos = segment.coordinates
+        for i = 1:size(cos,1)-1
+            push!(segment_nodes,
+                  Lisp.KNode(ksym"segment",
+                             Lisp.KNode(ksym"start", Lisp.obj.(cos[i,:])...), Lisp.KNode(ksym"end", Lisp.obj.(cos[i+1,:])...),
+                             Lisp.KNode(ksym"width", Lisp.obj(segment.width)),
+                             Lisp.KNode(ksym"layer", Lisp.obj(segment.layer)),
+                             Lisp.KNode(ksym"net", Lisp.obj(findfirst(isequal(segment.net), unique_nets)))))
+        end
+    end
+    segment_nodes
+end
+
 function zones_to_lisp(pcb::PCB, nets, unique_nets)
     zone_nodes = Lisp.KNode[]
     for zone in pcb.zones
@@ -391,6 +415,7 @@ function Base.show(io::IO, pcb::PCB)
     net_nodes,nets,unique_nets = define_nets(pcb)
     append!(node.children, net_nodes)
     append!(node.children, elements_to_lisp(pcb, nets, unique_nets))
+    append!(node.children, segments_to_lisp(pcb, nets, unique_nets))
     append!(node.children, zones_to_lisp(pcb, nets, unique_nets))
 
     show(io, node)
