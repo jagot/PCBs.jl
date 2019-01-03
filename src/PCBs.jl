@@ -154,6 +154,37 @@ function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false)
     node
 end
 
+function define_nets(pcb::PCB)
+    net_nodes = Lisp.KNode[]
+    nets = node_names(pcb.circuit)
+    unique_nets = unique(nets)
+
+    pcb.general[:nets] += length(unique_nets)
+
+    push!(net_nodes, settings_dict_to_lisp("general", pcb.general))
+    append!(net_nodes, Lisp.Read("(page $(pcb.page))"))
+    push!(net_nodes, settings_dict_to_lisp("layers", pcb.layers, true))
+    push!(net_nodes, settings_dict_to_lisp("setup", pcb.setup))
+
+    append!(net_nodes, Lisp.Read("(net 0 \"\")"))
+    for (i,net) in enumerate(unique_nets)
+        net_node = Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(i), Lisp.obj(net)])
+        push!(net_nodes, net_node)
+    end
+
+    for ((name,descr),v) in pcb.net_classes
+        nc = Lisp.KNode([Lisp.KSym("net_class"), Lisp.KSym(name), Lisp.KStr(descr)])
+        append!(nc.children, settings_dict_to_lisp("net_class", v).children[2:end])
+        if name == :Default
+            for (i,net) in enumerate(unique_nets)
+                append!(nc.children, Lisp.Read("(add_net \"$(net)\")"))
+            end
+        end
+        push!(net_nodes, nc)
+    end
+    net_nodes,nets,unique_nets
+end
+
 function read_kicad_lisp_file(filename)
     isfile(filename) || throw(ArgumentError("$filename missing"))
     @debug "Reading $filename"
@@ -244,37 +275,9 @@ function modify_text!(footprint::Lisp.KNode, text::Dict{String,<:Dict})
     end
 end
 
-function Base.show(io::IO, pcb::PCB)
-    node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
-
-    nets = node_names(pcb.circuit)
-    unique_nets = unique(nets)
-
-    pcb.general[:nets] += length(unique_nets)
-
-    push!(node.children, settings_dict_to_lisp("general", pcb.general))
-    append!(node.children, Lisp.Read("(page $(pcb.page))"))
-    push!(node.children, settings_dict_to_lisp("layers", pcb.layers, true))
-    push!(node.children, settings_dict_to_lisp("setup", pcb.setup))
-
-    append!(node.children, Lisp.Read("(net 0 \"\")"))
-    for (i,net) in enumerate(unique_nets)
-        net_node = Lisp.KNode([Lisp.KSym("net"), Lisp.KInt(i), Lisp.obj(net)])
-        push!(node.children, net_node)
-    end
-
-    for ((name,descr),v) in pcb.net_classes
-        nc = Lisp.KNode([Lisp.KSym("net_class"), Lisp.KSym(name), Lisp.KStr(descr)])
-        append!(nc.children, settings_dict_to_lisp("net_class", v).children[2:end])
-        if name == :Default
-            for (i,net) in enumerate(unique_nets)
-                append!(nc.children, Lisp.Read("(add_net \"$(net)\")"))
-            end
-        end
-        push!(node.children, nc)
-    end
-
+function elements_to_lisp(pcb::PCB, nets, unique_nets)
     footprints = Dict{String, Lisp.KNode}()
+    element_nodes = Lisp.KNode[]
 
     for e in pcb.circuit.elements
         f = try
@@ -324,8 +327,17 @@ function Base.show(io::IO, pcb::PCB)
         :layers ∈ ks && replace_layers!(footprint, e.meta[:layers])
         :text ∈ ks && modify_text!(footprint, e.meta[:text])
 
-        push!(node.children, footprint)
+        push!(element_nodes, footprint)
     end
+    element_nodes
+end
+
+function Base.show(io::IO, pcb::PCB)
+    node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
+
+    net_nodes,nets,unique_nets = define_nets(pcb)
+    append!(node.children, net_nodes)
+    append!(node.children, elements_to_lisp(pcb, nets, unique_nets))
 
     show(io, node)
 end
