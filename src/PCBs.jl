@@ -107,6 +107,24 @@ net_classes() = Dict{Tuple{Symbol,String},Dict{Symbol,Float64}}(
     )
 )
 
+zone_settings() = Dict(:tstamp => 0,
+                       :hatch => [:edge, 0.508],
+                       :connect_pads => [:yes, Dict(:clearance => 0.508)],
+                       :min_thickness => 0.254,
+                       :fill => Dict(:arc_segments => 16,
+                                    :thermal_gap => 0.508,
+                                    :thermal_bridge_width => 0.508))
+
+end
+
+mutable struct Zone
+    name::Union{Symbol,String}
+    layer::Symbol
+    polygon::Matrix{Float64}
+    settings::Dict
+end
+function Zone(name, layer, polygon; settings = Settings.zone_settings())
+    Zone(name, Symbol(layer), polygon, settings)
 end
 
 struct PCB
@@ -120,6 +138,7 @@ struct PCB
     layers::Dict{Int,Vector{Symbol}}
     setup::Dict{Symbol,Any}
     net_classes::Dict{Tuple{Symbol,String},Dict{Symbol,Float64}}
+    zones::Vector{Zone}
 end
 
 PCB(circuit::Circuit, filename::String;
@@ -130,10 +149,12 @@ PCB(circuit::Circuit, filename::String;
     page="A4",
     layers=Settings.layers(),
     setup=Settings.setup(),
-    net_classes=Settings.net_classes()) =
+    net_classes=Settings.net_classes(),
+    zones=Zone[]) =
         PCB(circuit, filename, directories,
             version, host,
-            general, page, layers, setup, net_classes)
+            general, page, layers, setup, net_classes,
+            zones)
 
 function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false;
                                ks=collect(keys(settings)))
@@ -217,6 +238,7 @@ function find_footprint(footprint, directories)
     throw(ArgumentError("Footprint $footprint not found"))
 end
 
+xy(x, y) = Lisp.KNode(ksym"xy", Lisp.obj(x), Lisp.obj(y))
 xyz(x, y, z) = Lisp.KNode(ksym"xyz", Lisp.obj(x), Lisp.obj(y), Lisp.obj(z))
 
 function get_model(filename::String; at=[0,0,0], scale=[1,1,1], rotate=[0,0,0])
@@ -340,12 +362,30 @@ function elements_to_lisp(pcb::PCB, nets, unique_nets)
     element_nodes
 end
 
+function zones_to_lisp(pcb::PCB, nets, unique_nets)
+    zone_nodes = Lisp.KNode[]
+    for zone in pcb.zones
+        zone_node = settings_dict_to_lisp("zone", zone.settings)
+        insert!(zone_node.children, 2, Lisp.KNode(ksym"layer", Lisp.KSym(zone.layer)))
+        insert!(zone_node.children, 2, Lisp.KNode(ksym"net_name", Lisp.KSym(zone.name)))
+        insert!(zone_node.children, 2, Lisp.KNode(ksym"net", Lisp.KInt(findfirst(isequal(zone.name), unique_nets))))
+        polygon = Lisp.KNode(ksym"polygon", Lisp.KNode(ksym"pts"))
+        for i = 1:size(zone.polygon,1)
+            push!(polygon.children[2].children, xy(zone.polygon[i,:]...))
+        end
+        push!(zone_node.children, polygon)
+        push!(zone_nodes, zone_node)
+    end
+    zone_nodes
+end
+
 function Base.show(io::IO, pcb::PCB)
     node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
 
     net_nodes,nets,unique_nets = define_nets(pcb)
     append!(node.children, net_nodes)
     append!(node.children, elements_to_lisp(pcb, nets, unique_nets))
+    append!(node.children, zones_to_lisp(pcb, nets, unique_nets))
 
     show(io, node)
 end
