@@ -98,6 +98,7 @@ mutable struct KNode <: KObj
     children::Vector{KObj}
 end
 KNode() = KNode(KObj[])
+KNode(objs::KObj...) = KNode([objs...])
 
 Base.copy(n::KNode) = KNode(copy(n.children))
 

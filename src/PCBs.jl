@@ -136,12 +136,12 @@ PCB(circuit::Circuit, filename::String;
             general, page, layers, setup, net_classes)
 
 function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false)
-    node = Lisp.KNode([Lisp.KSym(name)])
+    node = Lisp.KNode(Lisp.KSym(name))
     ks = collect(keys(settings))
     sorted && sort!(ks)
     children = map(ks) do k
         v = settings[k]
-        child = Lisp.KNode([Lisp.obj(k)])
+        child = Lisp.KNode(Lisp.obj(k))
         if v isa Vector
             append!(child.children, Lisp.obj.(v))
         elseif v isa Dict
@@ -169,12 +169,12 @@ function define_nets(pcb::PCB)
 
     append!(net_nodes, Lisp.Read("(net 0 \"\")"))
     for (i,net) in enumerate(unique_nets)
-        net_node = Lisp.KNode([ksym"net", Lisp.KInt(i), Lisp.obj(net)])
+        net_node = Lisp.KNode(ksym"net", Lisp.KInt(i), Lisp.obj(net))
         push!(net_nodes, net_node)
     end
 
     for ((name,descr),v) in pcb.net_classes
-        nc = Lisp.KNode([ksym"net_class", Lisp.KSym(name), Lisp.KStr(descr)])
+        nc = Lisp.KNode(ksym"net_class", Lisp.KSym(name), Lisp.KStr(descr))
         append!(nc.children, settings_dict_to_lisp("net_class", v).children[2:end])
         if name == :Default
             for (i,net) in enumerate(unique_nets)
@@ -210,13 +210,13 @@ function find_footprint(footprint, directories)
     throw(ArgumentError("Footprint $footprint not found"))
 end
 
-xyz(x, y, z) = Lisp.KNode([ksym"xyz", Lisp.obj(x), Lisp.obj(y), Lisp.obj(z)])
+xyz(x, y, z) = Lisp.KNode(ksym"xyz", Lisp.obj(x), Lisp.obj(y), Lisp.obj(z))
 
 function get_model(filename::String; at=[0,0,0], scale=[1,1,1], rotate=[0,0,0])
     [ksym"model", Lisp.KSym(filename),
-     Lisp.KNode([ksym"at", xyz(at...)]),
-     Lisp.KNode([ksym"scale", xyz(scale...)]),
-     Lisp.KNode([ksym"rotate", xyz(rotate...)])]
+     Lisp.KNode(ksym"at", xyz(at...)),
+     Lisp.KNode(ksym"scale", xyz(scale...)),
+     Lisp.KNode(ksym"rotate", xyz(rotate...))]
 end
 
 get_model(model::Pair{String,<:Dict{Symbol}}) = get_model(model[1];model[2]...)
@@ -297,7 +297,7 @@ function elements_to_lisp(pcb::PCB, nets, unique_nets)
              : 0)
         rot = :rot ∈ ks ? e.meta[:rot] : 0
 
-        at = Lisp.KNode([ksym"at"])
+        at = Lisp.KNode(ksym"at")
         for c in [x,y,rot]
             push!(at.children, Lisp.obj(c))
         end
@@ -315,7 +315,7 @@ function elements_to_lisp(pcb::PCB, nets, unique_nets)
                     pad = pads[c.children[2].i]
                     c.children = copy(c.children)
                     push!(c.children,
-                          Lisp.KNode([ksym"net", Lisp.KInt(pad[2]), Lisp.KStr(pad[1])]))
+                          Lisp.KNode(ksym"net", Lisp.KInt(pad[2]), Lisp.KStr(pad[1])))
                 elseif c.children[1] == ksym"model" && :model ∈ ks
                     c.children = get_model(e.meta[:model])
                 elseif c.children[1] == ksym"fp_text" &&
