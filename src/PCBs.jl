@@ -226,6 +226,24 @@ end
 replace_layers!(footprint::Lisp.KNode, layers::Pair{String,String}) =
     replace_layers!(footprint, [layers])
 
+function modify_text!(footprint::Lisp.KNode, text::Dict{String,<:Dict})
+    Lisp.traverse_nodes(footprint, "fp_text") do node
+        text_name = node.children[2].name
+        for t in keys(text)
+            if text_name == t
+                node.children = copy(node.children)
+                for (i,n) in enumerate(node.children)
+                    if n isa Lisp.KNode
+                        s = Symbol(n.children[1].name)
+                        s ∈ keys(text[t]) || continue
+                        node.children[i] = Lisp.KNode(vcat(Lisp.KSym(s), Lisp.obj(text[t][s])))
+                    end
+                end
+            end
+        end
+    end
+end
+
 function Base.show(io::IO, pcb::PCB)
     node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
 
@@ -303,9 +321,8 @@ function Base.show(io::IO, pcb::PCB)
                 end
             end
         end
-        if :layers ∈ ks
-            replace_layers!(footprint, e.meta[:layers])
-        end
+        :layers ∈ ks && replace_layers!(footprint, e.meta[:layers])
+        :text ∈ ks && modify_text!(footprint, e.meta[:text])
 
         push!(node.children, footprint)
     end

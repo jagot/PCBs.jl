@@ -161,6 +161,7 @@ obj(o::Symbol) = KSym(o)
 obj(o::String) = KStr(o)
 obj(o::I) where {I<:Integer} = KInt(o)
 obj(o::F) where {F<:AbstractFloat} = KFloat(o)
+obj(v::Vector) = obj.(v)
 
 function Parse(tokens::Vector{Tuple{Symbol,String}})
     nodes = KNode[]
