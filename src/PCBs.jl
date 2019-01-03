@@ -135,15 +135,22 @@ PCB(circuit::Circuit, filename::String;
             version, host,
             general, page, layers, setup, net_classes)
 
-function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false)
+function settings_dict_to_lisp(name::String, settings::Dict, sorted::Bool=false;
+                               ks=collect(keys(settings)))
     node = Lisp.KNode(Lisp.KSym(name))
-    ks = collect(keys(settings))
     sorted && sort!(ks)
     children = map(ks) do k
         v = settings[k]
         child = Lisp.KNode(Lisp.obj(k))
         if v isa Vector
-            append!(child.children, Lisp.obj.(v))
+            for e in v
+                if e isa Dict
+                    s = settings_dict_to_lisp("tmp", e)
+                    append!(child.children, s.children[2:end])
+                else
+                    push!(child.children, Lisp.obj(e))
+                end
+            end
         elseif v isa Dict
             child = settings_dict_to_lisp(string(k), v)
         else
