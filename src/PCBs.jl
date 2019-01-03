@@ -190,6 +190,8 @@ end
 get_model(model::Pair{String,<:Dict{Symbol}}) = get_model(model[1];model[2]...)
 
 function replace_layers!(footprint::Lisp.KNode, layers::Vector{Pair{Regex,String}})
+    mirror = Lisp.Read("(justify mirror)")
+    do_mirror = any(map(isequal("B"), last.(layers)))
     Lisp.traverse(footprint) do node
         if node isa Lisp.KNode
             fc = first(node.children)
@@ -202,6 +204,17 @@ function replace_layers!(footprint::Lisp.KNode, layers::Vector{Pair{Regex,String
                             if m != nothing
                                 node.children[i] = Lisp.KSym("$(subs).$(m[1])")
                                 break # We don't want the reverse pattern to apply as well
+                            end
+                        end
+                    end
+                elseif fc.name == "fp_text"
+                    node.children = copy(node.children)
+                    Lisp.traverse(node) do text_prop
+                        if text_prop isa Lisp.KNode
+                            tfc = first(text_prop.children)
+                            if tfc.name == "effects"
+                                text_prop.children = copy(text_prop.children)
+                                append!(text_prop.children, mirror)
                             end
                         end
                     end
