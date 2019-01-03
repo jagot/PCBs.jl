@@ -189,6 +189,37 @@ end
 
 get_model(model::Pair{String,<:Dict{Symbol}}) = get_model(model[1];model[2]...)
 
+function replace_layers!(footprint::Lisp.KNode, layers::Vector{Pair{Regex,String}})
+    Lisp.traverse(footprint) do node
+        if node isa Lisp.KNode
+            fc = first(node.children)
+            if fc isa Lisp.KSym
+                if fc.name ∈ ["layer","layers"]
+                    node.children = copy(node.children)
+                    for i = 2:length(node.children)
+                        for (pat,subs) in layers
+                            m = match(pat, node.children[i].name)
+                            if m != nothing
+                                node.children[i] = Lisp.KSym("$(subs).$(m[1])")
+                                break # We don't want the reverse pattern to apply as well
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function replace_layers!(footprint::Lisp.KNode, layers::Vector{Pair{String,String}})
+    layers = vcat(map(l -> Regex("$(l[1])\\.(.*)") => l[2], layers),
+                  map(l -> Regex("$(l[2])\\.(.*)") => l[1], layers))
+    replace_layers!(footprint, layers)
+end
+
+replace_layers!(footprint::Lisp.KNode, layers::Pair{String,String}) =
+    replace_layers!(footprint, [layers])
+
 function Base.show(io::IO, pcb::PCB)
     node = Lisp.Read("(kicad_pcb (version $(pcb.version)) (host pcbnew \"$(pcb.host)\"))")[1]
 
@@ -265,6 +296,9 @@ function Base.show(io::IO, pcb::PCB)
                     c.children[3] = Lisp.KStr(string(e))
                 end
             end
+        end
+        if :layers ∈ ks
+            replace_layers!(footprint, e.meta[:layers])
         end
 
         push!(node.children, footprint)
